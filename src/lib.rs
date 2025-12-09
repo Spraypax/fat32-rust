@@ -1,3 +1,7 @@
+use crate::boot::BootSector;
+use crate::file::File;
+use alloc::vec::Vec;
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(not(feature = "std"))]
@@ -54,5 +58,27 @@ pub mod std_support {
 
             Ok(())
         }
+    }
+}
+
+pub struct Fat32<D: BlockDevice> {
+    pub device: D,
+    pub boot: boot::BootSector,
+    // plus tard : offsets, cache de FAT, etc.
+}
+
+impl<D: BlockDevice> Fat32<D> {
+    pub fn open_file(&mut self, path: &str) -> Result<File<'_, D>, Error> {
+        let entry = self.resolve_path(path)?;
+        if !entry.is_dir {
+            // construire la chaines de clusters + File
+        } else {
+            Err(Error::InvalidFs) // ou autre
+        }
+    }
+
+    pub fn read_file(&mut self, path: &str) -> Result<alloc::vec::Vec<u8>, Error> {
+        let mut f = self.open_file(path)?;
+        f.read_to_end()
     }
 }

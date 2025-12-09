@@ -1,3 +1,5 @@
+use crate::Error;
+
 pub struct BootSector {
     pub bytes_per_sector: u16,
     pub sectors_per_cluster: u8,
