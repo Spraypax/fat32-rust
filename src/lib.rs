@@ -67,6 +67,8 @@ pub struct Fat32<D: BlockDevice> {
     pub fat_start_lba: u32,
     /// LBA de début de la zone data (cluster 2)
     pub data_start_lba: u32,
+    /// Répertoire courant (cluster)
+    pub cwd_cluster: u32,
 }
 
 impl<D: BlockDevice> Fat32<D> {
@@ -86,6 +88,7 @@ impl<D: BlockDevice> Fat32<D> {
             boot,
             fat_start_lba,
             data_start_lba,
+	    cwd_cluster: boot.root_cluster,
         })
     }
 
