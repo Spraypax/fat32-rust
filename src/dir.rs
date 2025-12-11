@@ -127,13 +127,18 @@ impl<D: BlockDevice> Fat32<D> {
         self.read_dir_cluster(self.boot.root_cluster)
     }
 
-    /// Résout un chemin absolu à partir de la racine (pas encore de cwd).
-    pub fn resolve_path(&mut self, path: &str) -> Result<DirEntry, Error> {
-        if path == "/" || path.is_empty() {
-            return Err(Error::InvalidFs); // racine = dossier, pas fichier
-        }
+    /// Liste le répertoire courant.
+    pub fn list_cwd(&mut self) -> Result<Vec<DirEntry>, Error> {
+        self.read_dir_cluster(self.cwd_cluster)
+    }
 
-        let mut current_cluster = self.boot.root_cluster;
+    /// Résout un chemin **à partir d’un cluster de départ**.
+    fn resolve_from_cluster(
+        &mut self,
+        start_cluster: u32,
+        path: &str,
+    ) -> Result<DirEntry, Error> {
+        let mut current_cluster = start_cluster;
         let mut last_entry = None;
 
         for part in path.split('/').filter(|p| !p.is_empty()) {
@@ -155,5 +160,43 @@ impl<D: BlockDevice> Fat32<D> {
         }
 
         last_entry.ok_or(Error::NotFound)
+    }
+
+    /// Résout un chemin :
+    /// - commençant par `/` → depuis la racine
+    /// - sinon → depuis le répertoire courant (`cwd_cluster`)
+    pub fn resolve_path(&mut self, path: &str) -> Result<DirEntry, Error> {
+        if path.is_empty() || path == "/" {
+            return Err(Error::InvalidFs); // la racine n’est pas un fichier
+        }
+
+        if path.starts_with('/') {
+            self.resolve_from_cluster(self.boot.root_cluster, path)
+        } else {
+            self.resolve_from_cluster(self.cwd_cluster, path)
+        }
+    }
+
+    /// Change le répertoire courant (comme `cd`).
+    pub fn change_dir(&mut self, path: &str) -> Result<(), Error> {
+        // chemins relatifs/absolus gérés par resolve_path
+        let entry = if path == "/" {
+            // cas spécial : retourner à la racine
+            DirEntry {
+                name: "/".to_string(),
+                first_cluster: self.boot.root_cluster,
+                size: 0,
+                is_dir: true,
+            }
+        } else {
+            self.resolve_path(path)?
+        };
+
+        if !entry.is_dir {
+            return Err(Error::InvalidFs);
+        }
+
+        self.cwd_cluster = entry.first_cluster;
+        Ok(())
     }
 }
