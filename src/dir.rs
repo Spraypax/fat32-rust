@@ -142,22 +142,28 @@ impl<D: BlockDevice> Fat32<D> {
         let mut last_entry = None;
 
         for part in path.split('/').filter(|p| !p.is_empty()) {
-            let name = part;
+	    // .  => ne rien faire
+	    if part == "." {
+		continue;
+	    }
 
-            let entries = self.read_dir_cluster(current_cluster)?;
-            let mut found = None;
+	    // .. => remonter (via l’entrée ".." du répertoire)
+	    if part == ".." {
+		let entries = self.read_dir_cluster(current_cluster)?;
+		let mut parent = None;
+		for e in entries {
+		    if e.name == ".." {
+		        parent = Some(e);
+		        break;
+		    }
+		}
+		let p = parent.ok_or(Error::NotFound)?;
+		current_cluster = p.first_cluster;
+		last_entry = Some(p);
+		continue;
+	    }
 
-            for e in entries {
-                if e.name.eq_ignore_ascii_case(name) {
-                    found = Some(e);
-                    break;
-                }
-            }
-
-            let entry = found.ok_or(Error::NotFound)?;
-            current_cluster = entry.first_cluster;
-            last_entry = Some(entry);
-        }
+	    let name = part;
 
         last_entry.ok_or(Error::NotFound)
     }
