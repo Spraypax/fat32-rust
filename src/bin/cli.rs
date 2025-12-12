@@ -1,94 +1,138 @@
 use fat32_rust::{Fat32, std_support::StdBlockDevice};
-
-fn print_usage() {
-    eprintln!("Usage:");
-    eprintln!("  cli <image> ls [path]");
-    eprintln!("  cli <image> cat <path>");
-    eprintln!();
-    eprintln!("Exemples :");
-    eprintln!("  cli images/test_fat32.img ls /");
-    eprintln!("  cli images/test_fat32.img cat /README.TXT");
-}
+use std::io::{self, Write};
 
 fn main() {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
-
     if args.len() < 2 {
-        print_usage();
+        eprintln!("Usage:");
+        eprintln!("  cli <image> shell");
+        eprintln!("  cli <image> ls [path]");
+        eprintln!("  cli <image> cat <path>");
         return;
     }
 
-    let image_path = args.remove(0);
+    let image = args.remove(0);
     let cmd = args.remove(0);
 
-    // Ouvre l'image disque en BlockDevice
-    let dev = StdBlockDevice::open(&image_path, 512)
-        .expect("Impossible d'ouvrir l'image disque");
-    let mut fs = Fat32::new(dev)
-        .expect("Impossible d'initialiser le FS FAT32");
+    let dev = StdBlockDevice::open(&image, 512).expect("open image failed");
+    let mut fs = Fat32::new(dev).expect("init fat32 failed");
 
     match cmd.as_str() {
+        "shell" => shell(&mut fs),
         "ls" => {
-            // chemin facultatif, par défaut "/"
-            let path = if !args.is_empty() {
-                args.remove(0)
-            } else {
-                "/".to_string()
-            };
-
-            if path == "/" {
-                // liste la racine
-                let entries = fs.list_root().expect("Erreur list_root()");
-                for e in entries {
-                    if e.is_dir {
-                        println!("<DIR>  {}", e.name);
-                    } else {
-                        println!("       {}", e.name);
-                    }
-                }
-            } else {
-                // on résout le chemin et on liste si c'est un dossier
-                let entry = fs
-                    .resolve_path(&path)
-                    .expect("Chemin introuvable");
-
-                if !entry.is_dir {
-                    println!("{}", entry.name);
-                } else {
-                    let entries = fs
-                        .read_dir_cluster(entry.first_cluster)
-                        .expect("Erreur lecture répertoire");
-                    for e in entries {
-                        if e.is_dir {
-                            println!("<DIR>  {}", e.name);
-                        } else {
-                            println!("       {}", e.name);
-                        }
-                    }
-                }
-            }
+            let path = args.get(0).map(|s| s.as_str()).unwrap_or("/");
+            cmd_ls(&mut fs, path);
         }
-
         "cat" => {
-            if args.is_empty() {
-                eprintln!("cat nécessite un chemin de fichier");
-                print_usage();
-                return;
-            }
+            let path = args.get(0).expect("cat needs a path");
+            cmd_cat(&mut fs, path);
+        }
+        _ => eprintln!("Unknown command: {cmd}"),
+    }
+}
 
-            let path = args.remove(0);
+fn shell<D: fat32_rust::BlockDevice>(fs: &mut Fat32<D>) {
+    let stdin = io::stdin();
+    loop {
+        print!("fat32> ");
+        io::stdout().flush().unwrap();
 
-            let data = fs
-                .read_file(&path)
-                .expect("Erreur de lecture du fichier");
-
-            // on affiche en supposant du texte
-            print!("{}", String::from_utf8_lossy(&data));
+        let mut line = String::new();
+        if stdin.read_line(&mut line).is_err() {
+            break;
+        }
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
         }
 
-        _ => {
-            eprintln!("Commande inconnue: {cmd}");
-            print_usage();
+        let mut it = line.split_whitespace();
+        let cmd = it.next().unwrap();
+
+        match cmd {
+            "exit" | "quit" => break,
+            "pwd" => println!("(cwd cluster = {})", fs.cwd_cluster),
+            "ls" => {
+                let path = it.next().unwrap_or(".");
+                cmd_ls(fs, path);
+            }
+            "cd" => {
+                let path = it.next().unwrap_or("/");
+                match fs.change_dir(path) {
+                    Ok(_) => {}
+                    Err(e) => eprintln!("cd error: {:?}", e),
+                }
+            }
+            "cat" => {
+                if let Some(path) = it.next() {
+                    cmd_cat(fs, path);
+                } else {
+                    eprintln!("cat needs a path");
+                }
+            }
+            _ => eprintln!("Commands: ls, cd, cat, pwd, exit"),
         }
     }
+}
+
+fn cmd_ls<D: fat32_rust::BlockDevice>(fs: &mut Fat32<D>, path: &str) {
+    if path == "/" {
+        let entries = fs.list_root().expect("list_root failed");
+        for e in entries {
+            if e.is_dir {
+                println!("<DIR>  {}", e.name);
+            } else {
+                println!("       {}", e.name);
+            }
+        }
+        return;
+    }
+
+    if path == "." {
+        let entries = fs.list_cwd().expect("list_cwd failed");
+        for e in entries {
+            if e.is_dir {
+                println!("<DIR>  {}", e.name);
+            } else {
+                println!("       {}", e.name);
+            }
+        }
+        return;
+    }
+
+    let entry = match fs.resolve_path(path) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("ls: {:?} ({path})", e);
+            return;
+        }
+    };
+
+    if !entry.is_dir {
+        println!("{}", entry.name);
+        return;
+    }
+
+    let entries = fs
+        .read_dir_cluster(entry.first_cluster)
+        .expect("read_dir_cluster failed");
+
+    for e in entries {
+        if e.is_dir {
+            println!("<DIR>  {}", e.name);
+        } else {
+            println!("       {}", e.name);
+        }
+    }
+}
+
+fn cmd_cat<D: fat32_rust::BlockDevice>(fs: &mut Fat32<D>, path: &str) {
+    let data = match fs.read_file(path) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("cat: {:?} ({path})", e);
+            return;
+        }
+    };
+    print!("{}", String::from_utf8_lossy(&data));
 }
