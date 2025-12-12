@@ -3,8 +3,8 @@
 extern crate alloc;
 
 pub mod boot;
-pub mod fat;
 pub mod dir;
+pub mod fat;
 pub mod file;
 
 use boot::BootSector;
@@ -50,9 +50,7 @@ pub mod std_support {
                 .seek(SeekFrom::Start(offset))
                 .map_err(|_| Error::Io)?;
 
-            self.file
-                .read_exact(buf)
-                .map_err(|_| Error::Io)?;
+            self.file.read_exact(buf).map_err(|_| Error::Io)?;
 
             Ok(())
         }
@@ -78,18 +76,17 @@ impl<D: BlockDevice> Fat32<D> {
         device.read_sector(0, &mut sector0)?;
 
         let boot = BootSector::parse(&sector0)?;
-	let root_cluster = boot.root_cluster;
+        let root_cluster = boot.root_cluster;
 
         let fat_start_lba = boot.reserved_sectors as u32;
-        let data_start_lba =
-            fat_start_lba + (boot.num_fats as u32 * boot.sectors_per_fat);
+        let data_start_lba = fat_start_lba + (boot.num_fats as u32 * boot.sectors_per_fat);
 
         Ok(Self {
             device,
             boot,
             fat_start_lba,
             data_start_lba,
-	    cwd_cluster: root_cluster,
+            cwd_cluster: root_cluster,
         })
     }
 
@@ -103,8 +100,13 @@ impl<D: BlockDevice> Fat32<D> {
 
     /// Convertit un numéro de cluster en LBA du premier secteur de ce cluster.
     pub fn cluster_to_lba(&self, cluster: u32) -> u32 {
-        self.data_start_lba + (cluster - 2) * self.sectors_per_cluster()
-    }
+	    if cluster < 2 {
+		// cluster 0 ou 1 → racine (ou invalide)
+		self.data_start_lba
+	    } else {
+		self.data_start_lba + (cluster - 2) * self.sectors_per_cluster()
+	    }
+	}
 
     /// `resolve_path` est implémenté dans `dir.rs`
     /// pub fn resolve_path(&mut self, path: &str) -> Result<dir::DirEntry, Error>;
@@ -124,10 +126,7 @@ impl<D: BlockDevice> Fat32<D> {
     }
 
     /// Lit entièrement un fichier en mémoire.
-    pub fn read_file(
-        &mut self,
-        path: &str,
-    ) -> Result<alloc::vec::Vec<u8>, Error> {
+    pub fn read_file(&mut self, path: &str) -> Result<alloc::vec::Vec<u8>, Error> {
         let mut f = self.open_file(path)?;
         f.read_to_end()
     }

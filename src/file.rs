@@ -53,8 +53,7 @@ impl<'fs, D: BlockDevice> File<'fs, D> {
             let first_lba = self.fs.cluster_to_lba(cluster);
 
             // Lire tout le cluster en mémoire
-            let mut cluster_buf =
-                Vec::with_capacity(bytes_per_cluster);
+            let mut cluster_buf = Vec::with_capacity(bytes_per_cluster);
             cluster_buf.resize(bytes_per_cluster, 0);
 
             let mut off = 0;
@@ -69,9 +68,8 @@ impl<'fs, D: BlockDevice> File<'fs, D> {
             let available_in_cluster = bytes_per_cluster - offset_in_cluster;
             let to_copy = cmp::min(available_in_cluster, remaining_to_read);
 
-            buf[written..written + to_copy].copy_from_slice(
-                &cluster_buf[offset_in_cluster..offset_in_cluster + to_copy],
-            );
+            buf[written..written + to_copy]
+                .copy_from_slice(&cluster_buf[offset_in_cluster..offset_in_cluster + to_copy]);
 
             written += to_copy;
             remaining_to_read -= to_copy;

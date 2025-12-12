@@ -19,10 +19,8 @@ impl BootSector {
         let sectors_per_cluster = sector[13];
         let reserved_sectors = u16::from_le_bytes([sector[14], sector[15]]);
         let num_fats = sector[16];
-        let sectors_per_fat =
-            u32::from_le_bytes([sector[36], sector[37], sector[38], sector[39]]);
-        let root_cluster =
-            u32::from_le_bytes([sector[44], sector[45], sector[46], sector[47]]);
+        let sectors_per_fat = u32::from_le_bytes([sector[36], sector[37], sector[38], sector[39]]);
+        let root_cluster = u32::from_le_bytes([sector[44], sector[45], sector[46], sector[47]]);
 
         Ok(Self {
             bytes_per_sector,

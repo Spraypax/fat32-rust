@@ -121,11 +121,7 @@ impl<D: BlockDevice> Fat32<D> {
     }
 
     /// Résout un chemin à partir d’un cluster de départ.
-    fn resolve_from_cluster(
-        &mut self,
-        start_cluster: u32,
-        path: &str,
-    ) -> Result<DirEntry, Error> {
+    fn resolve_from_cluster(&mut self, start_cluster: u32, path: &str) -> Result<DirEntry, Error> {
         let mut current_cluster = start_cluster;
         let mut last_entry: Option<DirEntry> = None;
 
@@ -178,17 +174,29 @@ impl<D: BlockDevice> Fat32<D> {
 
     /// Change de répertoire courant (cd).
     pub fn change_dir(&mut self, path: &str) -> Result<(), Error> {
-        if path == "/" {
-            self.cwd_cluster = self.boot.root_cluster;
-            return Ok(());
-        }
+	    // cd /
+	    if path == "/" {
+		self.cwd_cluster = self.boot.root_cluster;
+		return Ok(());
+	    }
 
-        let entry = self.resolve_path(path)?;
-        if !entry.is_dir {
-            return Err(Error::InvalidFs);
-        }
+	    // cd .. depuis la racine → rester à la racine
+	    if path == ".." && self.cwd_cluster == self.boot.root_cluster {
+		return Ok(());
+	    }
 
-        self.cwd_cluster = entry.first_cluster;
-        Ok(())
-    }
+	    let entry = self.resolve_path(path)?;
+	    if !entry.is_dir {
+		return Err(Error::InvalidFs);
+	    }
+
+	    // cluster 0 => racine
+	    if entry.first_cluster == 0 {
+		self.cwd_cluster = self.boot.root_cluster;
+	    } else {
+		self.cwd_cluster = entry.first_cluster;
+	    }
+
+	    Ok(())
+	}
 }
