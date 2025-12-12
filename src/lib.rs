@@ -13,6 +13,7 @@ use file::File;
 /// Abstraction d'accès bloc → image disque, vrai disque, etc.
 pub trait BlockDevice {
     fn read_sector(&mut self, lba: u64, buf: &mut [u8]) -> Result<(), Error>;
+    fn write_sector(&mut self, lba: u64, buf: &[u8]) -> Result<(), Error>;
 }
 
 #[derive(Debug)]
@@ -24,20 +25,20 @@ pub enum Error {
 
 #[cfg(feature = "std")]
 pub mod std_support {
-    use std::fs::File as StdFile;
-    use std::io::{Read, Seek, SeekFrom};
+    use std::fs::OpenOptions;
+    use std::io::{Read, Seek, SeekFrom, Write};
 
     use crate::{BlockDevice, Error};
 
     /// Implémentation de BlockDevice par-dessus un fichier d'image.
     pub struct StdBlockDevice {
-        file: StdFile,
+        file: std::fs::File,
         pub sector_size: u64,
     }
 
     impl StdBlockDevice {
         pub fn open(path: &str, sector_size: u64) -> std::io::Result<Self> {
-            let file = StdFile::open(path)?;
+            let file = OpenOptions::new().read(true).write(true).open(path)?;
             Ok(Self { file, sector_size })
         }
     }
@@ -45,13 +46,19 @@ pub mod std_support {
     impl BlockDevice for StdBlockDevice {
         fn read_sector(&mut self, lba: u64, buf: &mut [u8]) -> Result<(), Error> {
             let offset = lba * self.sector_size;
-
             self.file
                 .seek(SeekFrom::Start(offset))
                 .map_err(|_| Error::Io)?;
-
             self.file.read_exact(buf).map_err(|_| Error::Io)?;
+            Ok(())
+        }
 
+        fn write_sector(&mut self, lba: u64, buf: &[u8]) -> Result<(), Error> {
+            let offset = lba * self.sector_size;
+            self.file
+                .seek(SeekFrom::Start(offset))
+                .map_err(|_| Error::Io)?;
+            self.file.write_all(buf).map_err(|_| Error::Io)?;
             Ok(())
         }
     }

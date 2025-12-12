@@ -20,11 +20,11 @@ fn main() {
     match cmd.as_str() {
         "shell" => shell(&mut fs),
         "ls" => {
-            let path = args.get(0).map(|s| s.as_str()).unwrap_or("/");
+            let path = args.first().map(|s| s.as_str()).unwrap_or("/");
             cmd_ls(&mut fs, path);
         }
         "cat" => {
-            let path = args.get(0).expect("cat needs a path");
+            let path = args.first().expect("cat needs a path");
             cmd_cat(&mut fs, path);
         }
         _ => eprintln!("Unknown command: {cmd}"),
