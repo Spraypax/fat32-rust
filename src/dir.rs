@@ -54,18 +54,11 @@ fn parse_entry(entry: &[u8]) -> Option<DirEntry> {
     let attr = entry[11];
     let is_dir = (attr & 0x10) != 0;
 
-    let first_cluster_high =
-        u16::from_le_bytes([entry[20], entry[21]]) as u32;
-    let first_cluster_low =
-        u16::from_le_bytes([entry[26], entry[27]]) as u32;
+    let first_cluster_high = u16::from_le_bytes([entry[20], entry[21]]) as u32;
+    let first_cluster_low = u16::from_le_bytes([entry[26], entry[27]]) as u32;
     let first_cluster = (first_cluster_high << 16) | first_cluster_low;
 
-    let size = u32::from_le_bytes([
-        entry[28],
-        entry[29],
-        entry[30],
-        entry[31],
-    ]);
+    let size = u32::from_le_bytes([entry[28], entry[29], entry[30], entry[31]]);
 
     Some(DirEntry {
         name,
@@ -77,10 +70,7 @@ fn parse_entry(entry: &[u8]) -> Option<DirEntry> {
 
 impl<D: BlockDevice> Fat32<D> {
     /// Lit toutes les entrées d’un répertoire à partir de son premier cluster.
-    pub fn read_dir_cluster(
-        &mut self,
-        first_cluster: u32,
-    ) -> Result<Vec<DirEntry>, Error> {
+    pub fn read_dir_cluster(&mut self, first_cluster: u32) -> Result<Vec<DirEntry>, Error> {
         let mut entries = Vec::new();
 
         let mut chain = alloc::vec::Vec::new();
@@ -122,58 +112,61 @@ impl<D: BlockDevice> Fat32<D> {
         Ok(entries)
     }
 
-    /// Liste le répertoire racine.
     pub fn list_root(&mut self) -> Result<Vec<DirEntry>, Error> {
         self.read_dir_cluster(self.boot.root_cluster)
     }
 
-    /// Liste le répertoire courant.
     pub fn list_cwd(&mut self) -> Result<Vec<DirEntry>, Error> {
         self.read_dir_cluster(self.cwd_cluster)
     }
 
-    /// Résout un chemin **à partir d’un cluster de départ**.
+    /// Résout un chemin à partir d’un cluster de départ.
     fn resolve_from_cluster(
         &mut self,
         start_cluster: u32,
         path: &str,
     ) -> Result<DirEntry, Error> {
         let mut current_cluster = start_cluster;
-        let mut last_entry = None;
+        let mut last_entry: Option<DirEntry> = None;
 
         for part in path.split('/').filter(|p| !p.is_empty()) {
-	    // .  => ne rien faire
-	    if part == "." {
-		continue;
-	    }
+            // "." → rester
+            if part == "." {
+                continue;
+            }
 
-	    // .. => remonter (via l’entrée ".." du répertoire)
-	    if part == ".." {
-		let entries = self.read_dir_cluster(current_cluster)?;
-		let mut parent = None;
-		for e in entries {
-		    if e.name == ".." {
-		        parent = Some(e);
-		        break;
-		    }
-		}
-		let p = parent.ok_or(Error::NotFound)?;
-		current_cluster = p.first_cluster;
-		last_entry = Some(p);
-		continue;
-	    }
+            // ".." → remonter via l’entrée ".."
+            if part == ".." {
+                let entries = self.read_dir_cluster(current_cluster)?;
+                let parent = entries
+                    .into_iter()
+                    .find(|e| e.name == "..")
+                    .ok_or(Error::NotFound)?;
 
-	    let name = part;
+                current_cluster = parent.first_cluster;
+                last_entry = Some(parent);
+                continue;
+            }
+
+            let entries = self.read_dir_cluster(current_cluster)?;
+            let entry = entries
+                .into_iter()
+                .find(|e| e.name.eq_ignore_ascii_case(part))
+                .ok_or(Error::NotFound)?;
+
+            current_cluster = entry.first_cluster;
+            last_entry = Some(entry);
+        }
 
         last_entry.ok_or(Error::NotFound)
     }
 
     /// Résout un chemin :
-    /// - commençant par `/` → depuis la racine
-    /// - sinon → depuis le répertoire courant (`cwd_cluster`)
+    /// - si commence par `/` → depuis la racine
+    /// - sinon → depuis le cwd
     pub fn resolve_path(&mut self, path: &str) -> Result<DirEntry, Error> {
         if path.is_empty() || path == "/" {
-            return Err(Error::InvalidFs); // la racine n’est pas un fichier
+            return Err(Error::InvalidFs);
         }
 
         if path.starts_with('/') {
@@ -183,21 +176,14 @@ impl<D: BlockDevice> Fat32<D> {
         }
     }
 
-    /// Change le répertoire courant (comme `cd`).
+    /// Change de répertoire courant (cd).
     pub fn change_dir(&mut self, path: &str) -> Result<(), Error> {
-        // chemins relatifs/absolus gérés par resolve_path
-        let entry = if path == "/" {
-            // cas spécial : retourner à la racine
-            DirEntry {
-                name: "/".to_string(),
-                first_cluster: self.boot.root_cluster,
-                size: 0,
-                is_dir: true,
-            }
-        } else {
-            self.resolve_path(path)?
-        };
+        if path == "/" {
+            self.cwd_cluster = self.boot.root_cluster;
+            return Ok(());
+        }
 
+        let entry = self.resolve_path(path)?;
         if !entry.is_dir {
             return Err(Error::InvalidFs);
         }
