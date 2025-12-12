@@ -78,6 +78,7 @@ impl<D: BlockDevice> Fat32<D> {
         device.read_sector(0, &mut sector0)?;
 
         let boot = BootSector::parse(&sector0)?;
+	let root_cluster = boot.root_cluster;
 
         let fat_start_lba = boot.reserved_sectors as u32;
         let data_start_lba =
@@ -88,7 +89,7 @@ impl<D: BlockDevice> Fat32<D> {
             boot,
             fat_start_lba,
             data_start_lba,
-	    cwd_cluster: boot.root_cluster,
+	    cwd_cluster: root_cluster,
         })
     }
 
