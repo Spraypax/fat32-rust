@@ -53,8 +53,7 @@ impl<'fs, D: BlockDevice> File<'fs, D> {
             let first_lba = self.fs.cluster_to_lba(cluster);
 
             // Lire tout le cluster en mémoire
-            let mut cluster_buf = Vec::with_capacity(bytes_per_cluster);
-            cluster_buf.resize(bytes_per_cluster, 0);
+            let mut cluster_buf = vec![0u8; bytes_per_cluster];
 
             let mut off = 0;
             for s in 0..sectors_per_cluster {

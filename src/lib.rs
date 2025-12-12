@@ -100,16 +100,15 @@ impl<D: BlockDevice> Fat32<D> {
 
     /// Convertit un numéro de cluster en LBA du premier secteur de ce cluster.
     pub fn cluster_to_lba(&self, cluster: u32) -> u32 {
-	    if cluster < 2 {
-		// cluster 0 ou 1 → racine (ou invalide)
-		self.data_start_lba
-	    } else {
-		self.data_start_lba + (cluster - 2) * self.sectors_per_cluster()
-	    }
-	}
+        if cluster < 2 {
+            // cluster 0 ou 1 → racine (ou invalide)
+            self.data_start_lba
+        } else {
+            self.data_start_lba + (cluster - 2) * self.sectors_per_cluster()
+        }
+    }
 
-    /// `resolve_path` est implémenté dans `dir.rs`
-    /// pub fn resolve_path(&mut self, path: &str) -> Result<dir::DirEntry, Error>;
+    // `resolve_path` est implémenté dans `dir.rs` (impl Fat32 dans dir.rs)
 
     /// Ouvre un fichier à partir de son chemin.
     pub fn open_file(&mut self, path: &str) -> Result<File<'_, D>, Error> {

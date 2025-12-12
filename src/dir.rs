@@ -80,8 +80,7 @@ impl<D: BlockDevice> Fat32<D> {
         let sectors_per_cluster = self.sectors_per_cluster() as usize;
         let bytes_per_cluster = bytes_per_sector * sectors_per_cluster;
 
-        let mut buf = Vec::with_capacity(chain.len() * bytes_per_cluster);
-        buf.resize(chain.len() * bytes_per_cluster, 0);
+        let mut buf = vec![0u8; chain.len() * bytes_per_cluster];
 
         let mut offset = 0;
         for &cluster in &chain {
@@ -174,29 +173,29 @@ impl<D: BlockDevice> Fat32<D> {
 
     /// Change de répertoire courant (cd).
     pub fn change_dir(&mut self, path: &str) -> Result<(), Error> {
-	    // cd /
-	    if path == "/" {
-		self.cwd_cluster = self.boot.root_cluster;
-		return Ok(());
-	    }
+        // cd /
+        if path == "/" {
+            self.cwd_cluster = self.boot.root_cluster;
+            return Ok(());
+        }
 
-	    // cd .. depuis la racine → rester à la racine
-	    if path == ".." && self.cwd_cluster == self.boot.root_cluster {
-		return Ok(());
-	    }
+        // cd .. depuis la racine → rester à la racine
+        if path == ".." && self.cwd_cluster == self.boot.root_cluster {
+            return Ok(());
+        }
 
-	    let entry = self.resolve_path(path)?;
-	    if !entry.is_dir {
-		return Err(Error::InvalidFs);
-	    }
+        let entry = self.resolve_path(path)?;
+        if !entry.is_dir {
+            return Err(Error::InvalidFs);
+        }
 
-	    // cluster 0 => racine
-	    if entry.first_cluster == 0 {
-		self.cwd_cluster = self.boot.root_cluster;
-	    } else {
-		self.cwd_cluster = entry.first_cluster;
-	    }
+        // cluster 0 => racine
+        if entry.first_cluster == 0 {
+            self.cwd_cluster = self.boot.root_cluster;
+        } else {
+            self.cwd_cluster = entry.first_cluster;
+        }
 
-	    Ok(())
-	}
+        Ok(())
+    }
 }
