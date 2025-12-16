@@ -70,9 +70,52 @@ fat32-rust/
 🔒 La bibliothèque est no_std (avec alloc).
 🧪 Le backend StdBlockDevice (std::fs::File) est utilisé uniquement pour le CLI et les tests.
 
-## 🖥️ CLI
+## 📦 Bibliothèque FAT32 (src/)
 
-Un binaire cli est fourni pour tester le lecteur FAT32.
+### lib.rs
+
+Cœur du driver FAT32 :
+- structure principale Fat32
+- API publique (ls, cat, cd)
+- abstraction BlockDevice
+- gestion no_std / alloc
+
+### boot.rs
+
+Parsing du Boot Sector (BPB) :
+- extraction des paramètres FAT32 essentiels
+
+### fat.rs
+
+Gestion de la FAT :
+- lecture des entrées
+- parcours des chaînes de clusters
+
+### dir.rs
+
+Gestion des répertoires :
+- lecture des entrées 8.3
+- résolution des chemins (/, ., ..)
+- implémentation de ls et cd
+
+### file.rs
+
+Gestion des fichiers :
+- lecture du contenu via chaînes de clusters
+- implémentation de cat
+
+### 🧪 Tests (tests/fat32_basic.rs)
+
+Tests d’intégration :
+- image FAT32 réelle
+- validation de ls, cat, cd, chemins relatifs et ..
+
+### 🖥️ CLI (src/bin/cli.rs)
+
+Binaire de test (avec std) :
+- ouvre une image FAT32
+- commandes ls, cat
+- shell interactif (cd, pwd, exit)
 
 ### ▶️ Commandes one-shot
 ```bash
@@ -149,13 +192,3 @@ sudo bash -c 'echo "Ceci est un fichier dans DIR1" > /mnt/fat32img/DIR1/FILE1.TX
 
 sudo umount /mnt/fat32img
 ```
-
-## 🏁 Conclusion
-
-fat32-rust est une implémentation :
-
-- complète
-- propre
-- testée
-- conforme aux contraintes no_std
-- avec outillage professionnel (clippy, miri, tests)
